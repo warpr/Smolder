@@ -1,5 +1,5 @@
 package Smolder::Email;
-use Smolder::Conf qw(HostName FromAddress SMTPHost Port);
+use Smolder::Conf qw(HostName FromAddress SMTPHost Port TemplateDir);
 use File::Spec::Functions qw(catdir tmpdir);
 use Template;
 use MIME::Lite;
@@ -22,7 +22,7 @@ Smolder utility class used to send multi-part MIME email messages
 
 our $TEMPLATE = Template->new(
     COMPILE_DIR  => tmpdir(),
-    INCLUDE_PATH => Smolder::Conf->template_dir,
+    INCLUDE_PATH => TemplateDir,
     COMPILE_EXT  => '.ttc',
     WRAPPER      => 'Email/wrapper.tmpl',
     FILTERS      => {
@@ -108,7 +108,7 @@ sub send_mime_mail {
     );
 
     # set the SMTP host
-    unless ($ENV{SMOLDER_TEST_HARNESS_ARCHIVE}) {
+    unless ($ENV{SMOLDER_TEST_HARNESS_ACTIVE}) {
         MIME::Lite->send('smtp', SMTPHost(), Timeout => 60) if SMTPHost();
         eval { $mime->send() };
     }

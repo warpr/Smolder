@@ -5,14 +5,12 @@ use base 'Module::Build::TAPArchive';
 use File::Temp;
 use Cwd qw(cwd);
 use File::Spec::Functions qw(catdir catfile tmpdir curdir rel2abs abs2rel splitdir);
-use IPC::Run qw(start finish pump);
-use LWP::UserAgent;
-use WWW::Mechanize;
 use File::Find ();
 use File::Copy qw(copy);
+use File::Path qw(mkpath);
 
-my $HOSTNAME = 'localhost.localdomain';
 my $PORT     = '112234';
+my $HOSTNAME = 'localhost.localdomain';
 
 =head1 NAME
 
@@ -46,41 +44,55 @@ sub _wrap_test_action {
     my ($self, $action) = @_;
     my $cwd = cwd();
 
-    # create a temporary database
-    my $tmp_dir = File::Temp->newdir(template => 'smolder-XXXXXX');
-    my $conf =
-        "Port $PORT\nHostname $HOSTNAME\n"
-      . "FromAddress smolder\@$HOSTNAME\nSecret ad01i11932lsk\n"
+    # create a temporary database and conf file
+    my $tmp_dir   = File::Temp->newdir(template => 'smolder-XXXXXX');
+    my $share_dir = $self->_share_blib_dir;
+    my $tmp_conf  = File::Temp->new(template => 'smolder-XXXXXX', suffix => '.conf', dir => tmpdir);
+    my $log_dir   = rel2abs(catdir(curdir, 'blib', 'logs'));
+    mkpath($log_dir) unless -d $log_dir;
+    
+    my $conf = "HostName '$HOSTNAME'\nPort '$PORT'\n"
       . "TemplateDir '"
-      . catdir($cwd, 'templates') . "'\n"
+      . catdir($share_dir, 'templates') . "'\n"
       . "HtdocsDir '"
-      . catdir($cwd, 'htdocs') . "'\n"
+      . catdir($share_dir, 'htdocs') . "'\n"
       . "SQLDir '"
-      . catdir($cwd, 'sql') . "'\n"
+      . catdir($share_dir, 'sql') . "'\n"
       . "DataDir '"
-      . $tmp_dir->dirname . "'\n";
-
-$conf .= "\nLogFile /home/mpeters/development/smolder/logs/smolder.log\n";
-
-    my $tmp_conf = File::Temp->new(template => 'smolder-XXXXXX', suffix => '.conf', dir => tmpdir);
+      . $tmp_dir->dirname . "'\n"
+      . "LogFile '" . catdir($log_dir, 'smolder.log') . "'\n";
     print $tmp_conf $conf;
     close $tmp_conf;
-    $ENV{SMOLDER_CONF}                 = $tmp_conf->filename;
-    $ENV{SMOLDER_TEST_HARNESS_ARCHIVE} = 1;
+    $ENV{SMOLDER_CONF} = $tmp_conf->filename;
 
     # make sure we create a DB first. Smolder will do this when it starts,
     # but we still want to run some tests even if we fail to start smolder
     $self->depends_on('db');
 
+    # our code needs to know it's running under the test harness
+    $ENV{SMOLDER_TEST_HARNESS_ACTIVE} = 1;
+
     # start the smolder server
     my ($in, $out, $err);
     $ENV{PERL5LIB} = catdir($cwd, 'blib', 'lib');
-    my $subprocess = start([catfile($cwd, 'bin', 'smolder')], \$in, \$out, \$err);
+    my @cmd = (
+        $^X,
+        catfile($cwd, 'blib', 'script', 'smolder'),
+        '--host'      => $HOSTNAME,
+        '--port'      => $PORT,
+    );
+    eval { require IPC::Run };
+    die "IPC::Run needed to run Smolder test: $@" if $@;
+    my $subprocess = IPC::Run::start(\@cmd, \$in, \$out, \$err);
     my $tries = 0;
     warn "Waiting for Smolder to start...\n";
     while (!_is_smolder_running() && $tries < 7) {
         sleep(3);
         $tries++;
+    }
+    if( !_is_smolder_running()) {
+        warn "Could not start Smolder server: $err\n";
+        warn "Trying tests anyway.\n";
     }
 
     my $method = "SUPER::ACTION_$action";
@@ -96,7 +108,6 @@ $conf .= "\nLogFile /home/mpeters/development/smolder/logs/smolder.log\n";
         $self->$method(@_);
     };
 
-    # finish() seems to hang, so just kill it
     $subprocess->kill_kill;
 }
 
@@ -104,6 +115,8 @@ sub _is_smolder_running {
     my $url = "http://$HOSTNAME:$PORT/app";
 
     # Create a user agent object
+    eval { require LWP::UserAgent };
+    die "LWP::UserAgent neede to run Smolder tests: $@" if $@;
     my $ua = LWP::UserAgent->new;
     $ua->timeout(4);
     my $res = $ua->get($url);
@@ -133,6 +146,8 @@ sub ACTION_smoke {
         $self->ACTION_test_archive();
 
         # now send the results off to smolder
+        eval { require WWW::Mechanize };
+        die "WWW::Mechanize neede to run Smolder smoke: $@" if $@;
         my $mech = WWW::Mechanize->new();
         $mech->get("$p->{server}/app");
         unless ($mech->status eq '200') {
@@ -262,23 +277,21 @@ sub _copy_files {
     my $cwd              = cwd();
     my $start_dir        = rel2abs(catdir(curdir, $type));
     my $start_dir_length = scalar splitdir($start_dir);
-    my $dest_dir         = rel2abs(catdir(curdir, 'blib', $type));
+    my $dest_dir         = catdir($self->_share_blib_dir, $type);
 
-    unless (-d $dest_dir) {
-        mkdir $dest_dir or die "Could not create directory $dest_dir: $!";
-    }
+    mkpath($dest_dir) or die "Could not create directory $dest_dir: $!" unless -d $dest_dir;
 
     File::Find::find(
         sub {
-            return if /^\./;                         # skip special files
-            return if $File::Find::dir =~ /\.svn/;
+            return if /^\./;                          # skip special files
+            return if $File::Find::dir =~ /\.svn/;    # skip svn droppings
             return if -d;
             my $name     = $_;
             my @new_dirs = splitdir($File::Find::dir);
             @new_dirs = @new_dirs[$start_dir_length .. $#new_dirs];
-            my $full_path;
+            my $full_path = $dest_dir;
             foreach my $new_dir (@new_dirs) {
-                $full_path = catdir($dest_dir, $new_dir);
+                $full_path = catdir($full_path, $new_dir);
                 unless (-d $full_path) {
                     mkdir($full_path) or die "Could not create directory $full_path: $!";
                 }
@@ -292,6 +305,10 @@ sub _copy_files {
         },
         $start_dir
     );
+}
+
+sub _share_blib_dir {
+    return rel2abs(catdir(curdir, 'blib', 'lib', 'auto', 'share', 'dist', 'Smolder'));
 }
 
 1;

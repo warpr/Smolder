@@ -3,28 +3,25 @@ use strict;
 use warnings;
 use base 'CGI::Application::Server';
 use File::Spec::Functions qw(catdir devnull);
-use Smolder::Conf qw(Port HostName LogFile);
+use Smolder::Conf qw(Port HostName LogFile HtdocsDir);
 use Smolder::DB;
 
 sub new {
-    my $class  = shift;
+    my ($class, %args) = @_;
     my $server = $class->SUPER::new(@_);
     $server->host(HostName);
     $server->port(Port);
-    my $htdocs = Smolder::Conf->htdocs_dir;
 
     $server->entry_points(
         {
             '/'    => 'Smolder::Redirect',
             '/app' => 'Smolder::Dispatch',
-
-            #'/static' => $htdocs", # need to get this working
-            '/js'     => $htdocs,
-            '/style'  => $htdocs,
-            '/images' => $htdocs,
+            '/js'     => HtdocsDir,
+            '/style'  => HtdocsDir,
+            '/images' => HtdocsDir,
         },
     );
-
+    $server->{"__smolder_$_"} = $args{$_} foreach keys %args;
     return $server;
 }
 
@@ -34,7 +31,7 @@ sub print_banner {
     print "$line\n$banner\n";
 }
 
-sub go {
+sub start {
     my $self = shift;
 
     unless (-e Smolder::DB->db_file) {
@@ -72,9 +69,11 @@ sub go {
         exit(1);
     }
 
-    return $self->run();
-
-    #    return $self->background();
+    if( $self->{__smolder_daemon} ) {
+        return $self->background();
+    } else {
+        return $self->run();
+    }
 }
 
 1;
