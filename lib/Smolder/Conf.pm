@@ -6,7 +6,6 @@ use File::ShareDir qw(dist_dir);
 use File::HomeDir;
 use File::Basename qw(dirname);
 use Carp qw(croak);
-use Config::ApacheFormat;
 use Smolder;
 
 sub _random_secret {
@@ -33,7 +32,6 @@ BEGIN {
         HostName              => 'localhost.localdomain',
         FromAddress           => 'smolder@localhost.localdomain',
         SMTPHost              => 'localhost.localdomain',
-        ProjectFullReportsMax => 0,
         LogFile               => '',
         TemplateDir           => catdir($share_dir, 'templates'),
         DataDir               => catdir(File::HomeDir->my_data, '.smolder'),

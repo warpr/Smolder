@@ -3,10 +3,9 @@ use strict;
 use warnings;
 use base 'Smolder::DB';
 use Smolder::DB::Developer;
-use Smolder::Conf qw(ProjectFullReportsMax DataDir);
+use Smolder::Conf qw(DataDir);
 use File::Path;
 use File::Spec::Functions qw(catdir);
-use DateTime::Format::MySQL;
 
 __PACKAGE__->set_up_table('project');
 __PACKAGE__->has_many('project_developers' => 'Smolder::DB::ProjectDeveloper');
@@ -33,8 +32,8 @@ The following columns will return objects instead of the value contained in the 
 
 __PACKAGE__->has_a(
     start_date => 'DateTime',
-    inflate    => sub { DateTime::Format::MySQL->parse_datetime(shift) },
-    deflate    => sub { DateTime::Format::MySQL->format_datetime(shift) },
+    inflate    => sub { __PACKAGE__->parse_datetime(shift) },
+    deflate    => sub { __PACKAGE__->format_datetime(shift) },
 );
 
 # make sure we delete any test_report directories associated with us
@@ -559,15 +558,15 @@ sub graph_start_datetime {
 
 =head3 purge_old_reports 
 
-This method will check to see if the C<ProjectFullReportsMax> configuration
-limit has been reached for this project and delete the tap archive files
-associated with those reports, also marking the reports as C<purged>.
+This method will check to see if the C<max_reports> limit has been reached
+for this project and delete the tap archive files associated with those
+reports, also marking the reports as C<purged>.
 
 =cut
 
 sub purge_old_reports {
     my $self = shift;
-    if (ProjectFullReportsMax) {
+    if ($self->max_reports) {
 
         # Delete any non-purged reports that pass the above limit
         my $sth = $self->db_Main->prepare_cached(
@@ -576,7 +575,7 @@ sub purge_old_reports {
             WHERE project = ? AND purged = 0
             ORDER BY added DESC
             LIMIT 1000000 OFFSET 
-        ) . ProjectFullReportsMax
+        ) . $self->max_reports
         );
         $sth->execute($self->id);
         my (@ids, $id);

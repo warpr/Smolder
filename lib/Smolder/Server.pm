@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use base 'CGI::Application::Server';
 use File::Spec::Functions qw(catdir devnull);
-use Smolder::Conf qw(Port HostName LogFile HtdocsDir);
+use File::Path qw(mkpath);
+use Smolder::Conf qw(Port HostName LogFile HtdocsDir DataDir);
 use Smolder::DB;
 
 sub new {
@@ -33,6 +34,10 @@ sub print_banner {
 
 sub start {
     my $self = shift;
+
+	if (not -e DataDir) {
+		mkpath(DataDir) or die sprintf("Could not create %s: $!", DataDir);
+	}
 
     unless (-e Smolder::DB->db_file) {
 
