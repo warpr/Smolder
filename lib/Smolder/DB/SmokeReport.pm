@@ -296,8 +296,6 @@ files can't be deleted for some reason. Returns true if all is good.
 sub delete_files {
     my $self = shift;
     rmtree($self->data_dir);
-    system("rm -rf " . $self->data_dir) == 0
-      or die "$!";
     $self->update();
     return 1;
 }
@@ -447,7 +445,7 @@ sub update_from_tap_archive {
 
     # our data structures for holding the info about the TAP parsing
     my ($duration, @suite_results, @tests, $label);
-    my ($total, $failed, $skipped) = (0, 0, 0);
+    my ($total, $failed, $skipped, $planned) = (0, 0, 0, 0);
     my $file_index = 0;
 
     # make our tap directory if it doesn't already exist
@@ -457,6 +455,9 @@ sub update_from_tap_archive {
     }
 
     my $meta;
+    # keep track of some things on our own because TAP::Parser::Aggregator 
+    # doesn't handle total or failed right when a test exits early
+    my %suite_data; 
     my $aggregator = TAP::Harness::Archive->aggregator_from_archive(
         {
             archive              => $file,
@@ -466,7 +467,7 @@ sub update_from_tap_archive {
 
                 # clear them out for a new run
                 @tests = ();
-                ($total, $failed, $skipped) = (0, 0, 0);
+                ($failed, $skipped) = (0, 0, 0);
 
                 # save the raw TAP stream somewhere we can use it later
                 my $new_file = catfile($self->data_dir, 'tap', "$file_index.tap");
@@ -488,7 +489,6 @@ sub update_from_tap_archive {
                             todo    => ($line->has_todo  || 0),
                             comment => ($line->as_string || 0),
                         );
-                        $total++;
                         $failed++  if !$line->is_ok;
                         $skipped++ if $line->has_skip;
                         push(@tests, \%details);
@@ -506,6 +506,30 @@ sub update_from_tap_archive {
                     }
                 },
                 EOF => sub {
+                    my $parser = shift;
+                    # did we run everything we planned to?
+                    my $planned = $parser->tests_planned;
+                    my $run = $parser->tests_run;
+                    my $total;
+                    if( $planned && $planned > $run ) {
+                        $total = $planned;
+                        foreach (1..$planned-$run) {
+                            $failed++;
+                            push(
+                                @tests,
+                                {
+                                    ok      => 0,
+                                    skip    => 0,
+                                    todo    => 0,
+                                    comment => "test died after test # $run",
+                                    died    => 1,
+                                }
+                            );
+                        }
+                    } else {
+                        $total = $run;
+                    }
+
                     my $percent = $total ? sprintf('%i', (($total - $failed) / $total) * 100) : 100;
                     push(
                         @suite_results,
@@ -518,6 +542,8 @@ sub update_from_tap_archive {
                             all_skipped => ($skipped == $total),
                         }
                     );
+                    $suite_data{total} += $total;
+                    $suite_data{failed} += $failed;
                   }
             },
         }
@@ -526,11 +552,11 @@ sub update_from_tap_archive {
     # update
     $self->set(
         pass       => scalar $aggregator->passed,
-        fail       => scalar $aggregator->failed,
+        fail       => $suite_data{failed},              # aggregator doesn't calculate these 2 right
+        total      => $suite_data{total},
         skip       => scalar $aggregator->skipped,
         todo       => scalar $aggregator->todo,
         todo_pass  => scalar $aggregator->todo_passed,
-        total      => $aggregator->total,
         test_files => scalar @suite_results,
         failed     => !!$aggregator->failed,
         duration   => $duration,

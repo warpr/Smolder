@@ -1,5 +1,14 @@
 Revision history for Smolder
 
+1.39
+    + Fixing Updated date in project Atom feeds - Hirose, Masaaki
+    + Adding robots.txt file to keep us from being overwhelmed by bots - M. Peters
+    + Correctly tell TAP::Harness::Archive to use ./lib - J. Leto
+    + Fixes to Smolder::Manual - J. Leto, B. Caswell
+    + Fixed ISE caused by report cleanup code when the max # of reports had been reached - M. Peters
+    + Fixed RT #45568 - J. Leto, M. Peters
+    + Fixed RT #45750 - M. Peters
+
 1.38
     + Forgot to include 1.37 upgrade files in MANIFEST - M. Peters
 

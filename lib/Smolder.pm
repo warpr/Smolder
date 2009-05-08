@@ -1,6 +1,6 @@
 package Smolder;
 
-our $VERSION = '1.38';
+our $VERSION = '1.39';
 
 1;
 
@@ -25,6 +25,10 @@ Please see L<Smolder::Manual> for how to use it.
 =head2 SUPPORT
 
 =over
+
+=item * Source Code
+
+L<https://github.com/mpeters/smolder/>
 
 =item * Bugs and Requests
 
