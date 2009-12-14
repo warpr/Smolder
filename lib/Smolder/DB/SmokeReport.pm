@@ -2,15 +2,18 @@ package Smolder::DB::SmokeReport;
 use strict;
 use warnings;
 use base 'Smolder::DB';
-use Smolder::Conf qw(DataDir);
+use Smolder::Conf qw(DataDir TruncateTestFilenames);
 use Smolder::Email;
 use File::Spec::Functions qw(catdir catfile);
+use File::Basename qw(basename);
 use File::Path qw(mkpath rmtree);
 use File::Copy qw(move copy);
 use File::Temp qw(tempdir);
 use Cwd qw(fastcwd);
 use DateTime;
 use Smolder::TAPHTMLMatrix;
+use Smolder::DB::TestFile;
+use Smolder::DB::TestFileResult;
 use Carp qw(croak);
 use TAP::Harness::Archive;
 use IO::Zlib;
@@ -54,7 +57,7 @@ __PACKAGE__->has_a(project   => 'Smolder::DB::Project');
 __PACKAGE__->add_trigger(
     before_create => sub {
         my $self = shift;
-        $self->_attribute_set(added => DateTime->now(time_zone => 'local'),);
+        $self->_attribute_set(added => DateTime->now(time_zone => 'local'));
     },
 );
 
@@ -211,7 +214,7 @@ sub _slurp_file {
     my ($self, $file_name) = @_;
     my $text;
     local $/;
-    open(my $IN, $file_name)
+    open(my $IN, '<', $file_name)
       or croak "Could not open file '$file_name' for reading! $!";
 
     $text = <$IN>;
@@ -242,6 +245,7 @@ sub _send_emails {
 
     # get all the developers of this project
     my @devs = $self->project->developers();
+    my %sent;
     foreach my $dev (@devs) {
 
         # get their preference for this project
@@ -270,6 +274,7 @@ sub _send_emails {
         # now send the type of email they want to receive
         my $type  = $pref->email_type;
         my $email = $dev->email;
+        next if $sent{"$email $type"}++;
         my $error = Smolder::Email->send_mime_mail(
             to        => $email,
             name      => "smoke_report_$type",
@@ -446,7 +451,8 @@ sub update_from_tap_archive {
     # our data structures for holding the info about the TAP parsing
     my ($duration, @suite_results, @tests, $label);
     my ($total, $failed, $skipped, $planned) = (0, 0, 0, 0);
-    my $file_index = 0;
+    my $file_index      = 0;
+    my $next_file_index = 0;
 
     # make our tap directory if it doesn't already exist
     my $tap_dir = catdir($self->data_dir, 'tap');
@@ -455,24 +461,25 @@ sub update_from_tap_archive {
     }
 
     my $meta;
-    # keep track of some things on our own because TAP::Parser::Aggregator 
+
+    # keep track of some things on our own because TAP::Parser::Aggregator
     # doesn't handle total or failed right when a test exits early
-    my %suite_data; 
+    my %suite_data;
     my $aggregator = TAP::Harness::Archive->aggregator_from_archive(
         {
             archive              => $file,
             made_parser_callback => sub {
                 my ($parser, $file, $full_path) = @_;
-                $label = $file;
+                $label = TruncateTestFilenames ? basename($file) : $file;
 
                 # clear them out for a new run
                 @tests = ();
                 ($failed, $skipped) = (0, 0, 0);
 
                 # save the raw TAP stream somewhere we can use it later
+                $file_index = $next_file_index++;
                 my $new_file = catfile($self->data_dir, 'tap', "$file_index.tap");
                 copy($full_path, $new_file) or die "Could not copy $full_path to $new_file. $!\n";
-                $file_index++;
             },
             meta_yaml_callback => sub {
                 my $yaml = shift;
@@ -489,7 +496,7 @@ sub update_from_tap_archive {
                             todo    => ($line->has_todo  || 0),
                             comment => ($line->as_string || 0),
                         );
-                        $failed++  if !$line->is_ok && !$line->has_skip && !$line->has_todo;
+                        $failed++ if !$line->is_ok && !$line->has_skip && !$line->has_todo;
                         $skipped++ if $line->has_skip;
                         push(@tests, \%details);
                     } elsif ($line->type eq 'comment' || $line->type eq 'unknown') {
@@ -507,13 +514,14 @@ sub update_from_tap_archive {
                 },
                 EOF => sub {
                     my $parser = shift;
+
                     # did we run everything we planned to?
                     my $planned = $parser->tests_planned;
-                    my $run = $parser->tests_run;
+                    my $run     = $parser->tests_run;
                     my $total;
-                    if( $planned && $planned > $run ) {
+                    if ($planned && $planned > $run) {
                         $total = $planned;
-                        foreach (1..$planned-$run) {
+                        foreach (1 .. $planned - $run) {
                             $failed++;
                             push(
                                 @tests,
@@ -531,6 +539,27 @@ sub update_from_tap_archive {
                     }
 
                     my $percent = $total ? sprintf('%i', (($total - $failed) / $total) * 100) : 100;
+
+                    # record the individual test file and test file result
+                    my $test_file = Smolder::DB::TestFile->find_or_create(
+                        {
+                            project => $self->project,
+                            label   => $label
+                        }
+                    ) or die "could not find or create test file '$label'";
+                    Smolder::DB::TestFileResult->insert_or_replace(
+                        {
+                            test_file    => $test_file->id,
+                            smoke_report => $self->id,
+                            project      => $self->project->id,
+                            total        => $total,
+                            failed       => $failed,
+                            percent      => $percent,
+                            file_index   => $file_index,
+                        }
+                    ) or die "could not set result for test file '$label'";
+
+                    # push a hash onto the list of results for TAPHTMLMatrix
                     push(
                         @suite_results,
                         {
@@ -540,9 +569,15 @@ sub update_from_tap_archive {
                             failed      => $failed,
                             percent     => $percent,
                             all_skipped => ($skipped == $total),
+                            is_muted    => $test_file->is_muted,
+                            mute_until  => $test_file->is_muted
+                            ? $test_file->mute_until->strftime("%a %b %d")
+                            : '',
+                            file_index => $file_index,
+                            test_file  => $test_file->id,
                         }
                     );
-                    $suite_data{total} += $total;
+                    $suite_data{total}  += $total;
                     $suite_data{failed} += $failed;
                   }
             },
@@ -558,7 +593,7 @@ sub update_from_tap_archive {
         todo       => scalar $aggregator->todo,
         todo_pass  => scalar $aggregator->todo_passed,
         test_files => scalar @suite_results,
-        failed     => !!$suite_data{failed},
+        failed     => !!$aggregator->failed,
         duration   => $duration,
     );
 

@@ -27,17 +27,25 @@ BEGIN {
         $share_dir = dist_dir('Smolder');
     }
 
+    my $default_hostname = $ENV{HOSTNAME} || $ENV{HOST} || 'localhost.localdomain';
     %VALUES = (
         Port                  => 8080,
-        HostName              => 'localhost.localdomain',
-        FromAddress           => 'smolder@localhost.localdomain',
-        SMTPHost              => 'localhost.localdomain',
+        HostName              => $default_hostname,
+        FromAddress           => "smolder\@$default_hostname",
+        SMTPHost              => $default_hostname,
         LogFile               => '',
+        LogLevel              => 'warning',
+        PidFile               => undef,
         TemplateDir           => catdir($share_dir, 'templates'),
         DataDir               => catdir(File::HomeDir->my_data, '.smolder'),
         HtdocsDir             => catdir($share_dir, 'htdocs'),
         SQLDir                => catdir($share_dir, 'sql'),
         Secret                => _random_secret(),
+        AutoRefreshReports    => 0,
+        TruncateTestFilenames => 0,
+        ErrorsToScreen        => 0,
+        ReportsPerPage        => 5,
+        AutoRedirectToProject => 0,
     );
 }
 
@@ -73,6 +81,113 @@ Smolder::Conf - Smolder configuration module
 This module provides access to the configuration settings in
 F<smolder.conf>.  Smolder tries to have reasonable defaults but they
 can be overridden when needed.
+
+=head1 OPTIONS
+
+The following configuration options are available:
+
+=head2 Port
+
+Port on which Smolder should listen.
+
+Default: 8080
+
+=head2 HostName
+
+Host name to listen to.
+
+Default: localhost.localdomain.
+
+=head2 FromAddress
+
+Email address from which reports should be sent. 
+
+Default: smolder@localhost.localdomain
+
+=head2 SMTPHost
+
+Hostname through which SMTP mail should be sent.
+
+Default: localhost.localdomain
+
+=head2 LogFile
+
+Log file to write to.
+
+Default: none
+
+=head2 LogLevel
+
+The level at which things will start to be logged. Only used if LogFile is set.
+
+Default: warning
+
+=head2 PidFile
+
+File in which to write the PID of the Smolder process.
+A PidFile is required for smolderctl to work.
+
+Default: none
+
+=head2 TemplateDir
+
+Source of Smolder's templates.
+
+Default: templates in the share directory
+
+=head2 DataDir
+
+Directory for all Smolder's stored data.
+
+Default: .smolder in the user's home directory
+
+=head2 HtdocsDir
+
+Smolder's HTML documents directory.
+
+Default: htdocs in the share directory
+
+=head2 SQLDir
+
+Smolder's SQL directory.
+
+Default: sql in the share directory
+
+=head2 Secret
+
+XXX
+
+Default: XXX
+
+=head2 AutoRefreshReports
+
+XXX
+
+Default: 0
+
+=head2 TruncateTestFilenames
+
+XXX
+
+Default: 0
+
+=head2 ErrorsToScreen
+
+XXX
+
+Default: 0
+
+=head2 ReportsPerPage
+
+Number of reports to show per Smolder web screen.
+
+Default: 5
+
+=head2 AutoRedirectToProject
+
+XXX
+
+Default: 0
 
 =head1 METHODS
 

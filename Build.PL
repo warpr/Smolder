@@ -20,6 +20,7 @@ my $builder = Smolder::Build->new(
         'CGI::Application::Plugin::TT'               => 1.04,
         'CGI::Application::Plugin::ValidateRM'       => 2.3,
         'Class::DBI'                                 => 3.0,
+        'Class::DBI::AbstractSearch'                 => 0.07,
         'Class::DBI::SQLite'                         => 0,
         'Class::DBI::Plugin::RetrieveAll'            => 1.04,
         'Data::FormValidator'                        => 4.61,
@@ -34,6 +35,7 @@ my $builder = Smolder::Build->new(
         'File::MMagic'                               => 0,
         'File::ShareDir'                             => 1.00,
         'File::HomeDir'                              => 0.80,
+        'File::Slurp'                                => 0,
         'File::Temp'                                 => 0.21,
         'File::Path'                                 => 2.04,
         'Getopt::Long'                               => 0,
@@ -47,6 +49,7 @@ my $builder = Smolder::Build->new(
         'IO::Zlib'                                   => 0,
         'JSON'                                       => 0,
         'MIME::Lite'                                 => 0,
+        'Net::Server::PreFork'                       => 0,
         'Pod::Usage'                                 => 0,
         'TAP::Harness::Archive'                      => 0.12,
         'Test::Harness'                              => 3.17,
@@ -69,16 +72,10 @@ my $builder = Smolder::Build->new(
         'File::Find'                => 0,
         'File::Copy'                => 0,
         'Module::Build'             => 0,
-        'Module::Build::TAPArchive' => 0,
     },
     add_to_cleanup     => ['data/*', 'logs/*', 'Smolder-*'],
     meta_add => {
         no_index => {
-            directory => [qw(
-                Smolder/Control
-                Smolder/DB
-                Smolder/Upgrade
-            )],
             file => [qw(
                 Smolder/AuthHandler.pm
                 Smolder/AuthInfo.pm
@@ -86,6 +83,23 @@ my $builder = Smolder::Build->new(
                 Smolder/Conf.pm
                 Smolder/Constraints.pm
                 Smolder/Control.pm
+                Smolder/Control/Admin.pm
+                Smolder/Control/Developer.pm
+                Smolder/Control/Graphs.pm
+                Smolder/Control/Projects.pm
+                Smolder/Control/Public.pm
+                Smolder/Control/Admin/Developers.pm
+                Smolder/Control/Admin/Projects.pm
+                Smolder/Control/Developer/Prefs.pm
+                Smolder/Control/Public/Auth.pm
+                Smolder/DB/Developer.pm
+                Smolder/DB/Preference.pm
+                Smolder/DB/ProjectDeveloper.pm
+                Smolder/DB/Project.pm
+                Smolder/DB/SmokeReport.pm
+                Smolder/DB/TestFileComment.pm
+                Smolder/DB/TestFile.pm
+                Smolder/DB/TestFileResult.pm
                 Smolder/DB.pm
                 Smolder/Dispatch.pm
                 Smolder/Email.pm
@@ -97,6 +111,14 @@ my $builder = Smolder::Build->new(
                 Smolder/TestScript.pm
                 Smolder/Upgrade.pm
                 Smolder/Util.pm
+                Smolder/Upgrade/V0_1.pm
+                Smolder/Upgrade/V0_3.pm
+                Smolder/Upgrade/V1_1.pm
+                Smolder/Upgrade/V1_21.pm
+                Smolder/Upgrade/V1_24.pm
+                Smolder/Upgrade/V1_30.pm
+                Smolder/Upgrade/V1_37.pm
+                Smolder/Upgrade/V1_50.pm
             )],
         },
     },

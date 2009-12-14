@@ -1,5 +1,22 @@
 Revision history for Smolder
 
+1.50
+    + Added bin/smolderctl - J. Swartz
+    + Added configuration directives TruncateTestFilenames, ReportsPerPage, AutoRefreshReports - J. Swartz
+    + smolder now exits if any options are invalid, instead of continuing on. - A. Lester
+    + Documentation improvements - M. Stosberg
+    + Now storing results per-stream - J. Swartz
+    + Individual test files can be muted so they don't generate emails for a specified period of time - J. Swartz, M. Peters
+    + Comments can be added to test files - J. Swartz, M. Peters
+    + Allow anonymous reports to be uploaded by bin/smolder_smoke_signal - M. Peters
+    + Fixed RT #49107 by trying to pick a better default hostname - M. Peters
+    + Fixed RT #49993 by making smolder_smoke_signal default to 8080 just like Smolder does - M. Peters
+    + Fixed RT #49997 by making sure we don't send duplicate emails if multiple accounts use the same address - M. Peters
+    + Compile templates at startup time. - A. Schrab
+    + Don't write a PidFile by default.  The previous default location is likely to not be writeable. - A. Schrab
+    + Added LogLevel configuration directive - M. Peters
+    + Changed all uses of open() to be 3-arg version - B. Oaks
+
 1.40
     + Tests that died prematurely didn't mark the whole suite as failed - M. Peters
     + Removed Module::Build::TAPArchive as a build dependency since

@@ -1,14 +1,22 @@
 ---
 name: Smolder
-version: 1.40
+version: 1.50
 author:
   - 'Michael Peters <mpeters@plusthree.com>'
-abstract: Web-based Continuous Integration Smoke Server
+abstract: continuous integration smoke server
 license: perl
 resources:
   license: http://dev.perl.org/licenses/
-configure_requires:
+build_requires:
+  File::Copy: 0
+  File::Find: 0
+  IPC::Run: 0.82
+  LWP::UserAgent: 0
   Module::Build: 0
+  Test::Builder: 0.86
+  Test::More: 0.86
+  Test::WWW::Mechanize: 1.22
+  WWW::Mechanize: 0
 requires:
   CGI::Application: 4.21
   CGI::Application::Dispatch: 2.15
@@ -19,6 +27,7 @@ requires:
   CGI::Application::Plugin::ValidateRM: 2.3
   CGI::Application::Server: 0.06
   Class::DBI: 3
+  Class::DBI::AbstractSearch: 0.07
   Class::DBI::Plugin::RetrieveAll: 1.04
   Class::DBI::SQLite: 0
   DBD::SQLite: 1.2
@@ -34,6 +43,7 @@ requires:
   File::MMagic: 0
   File::Path: 2.04
   File::ShareDir: 1
+  File::Slurp: 0
   File::Temp: 0.21
   GD::Graph: 0
   GD::Graph3d: 0
@@ -46,6 +56,7 @@ requires:
   IO::Zlib: 0
   JSON: 0
   MIME::Lite: 0
+  Net::Server::PreFork: 0
   Pod::Usage: 0
   TAP::Harness::Archive: 0.12
   Template::Plugin::Cycle: 0
@@ -54,21 +65,12 @@ requires:
   URI::Escape: 0
   URI::file: 0
   XML::Atom::SimpleFeed: 0
-build_requires:
-  File::Copy: 0
-  File::Find: 0
-  IPC::Run: 0.82
-  LWP::UserAgent: 0
+configure_requires:
   Module::Build: 0
-  Module::Build::TAPArchive: 0
-  Test::Builder: 0.86
-  Test::More: 0.86
-  Test::WWW::Mechanize: 1.22
-  WWW::Mechanize: 0
 provides:
   Smolder:
     file: lib/Smolder.pm
-    version: 1.40
+    version: 1.50
   Smolder::AuthHandler:
     file: lib/Smolder/AuthHandler.pm
   Smolder::AuthInfo:
@@ -89,20 +91,16 @@ provides:
     file: lib/Smolder/Control/Admin/Projects.pm
   Smolder::Control::Developer:
     file: lib/Smolder/Control/Developer.pm
-  Smolder::Control::Developer::Graphs:
-    file: lib/Smolder/Control/Developer/Graphs.pm
   Smolder::Control::Developer::Prefs:
     file: lib/Smolder/Control/Developer/Prefs.pm
-  Smolder::Control::Developer::Projects:
-    file: lib/Smolder/Control/Developer/Projects.pm
+  Smolder::Control::Graphs:
+    file: lib/Smolder/Control/Graphs.pm
+  Smolder::Control::Projects:
+    file: lib/Smolder/Control/Projects.pm
   Smolder::Control::Public:
     file: lib/Smolder/Control/Public.pm
   Smolder::Control::Public::Auth:
     file: lib/Smolder/Control/Public/Auth.pm
-  Smolder::Control::Public::Graphs:
-    file: lib/Smolder/Control/Public/Graphs.pm
-  Smolder::Control::Public::Projects:
-    file: lib/Smolder/Control/Public/Projects.pm
   Smolder::DB:
     file: lib/Smolder/DB.pm
   Smolder::DB::Developer:
@@ -115,6 +113,14 @@ provides:
     file: lib/Smolder/DB/ProjectDeveloper.pm
   Smolder::DB::SmokeReport:
     file: lib/Smolder/DB/SmokeReport.pm
+  Smolder::DB::TestFile:
+    file: lib/Smolder/DB/TestFile.pm
+  Smolder::DB::TestFileComment:
+    file: lib/Smolder/DB/TestFileComment.pm
+  Smolder::DB::TestFileResult:
+    file: lib/Smolder/DB/TestFileResult.pm
+  Smolder::Debug:
+    file: lib/Smolder/Debug.pm
   Smolder::Dispatch:
     file: lib/Smolder/Dispatch.pm
   Smolder::Email:
@@ -127,6 +133,10 @@ provides:
     file: lib/Smolder/Redirect.pm
   Smolder::Server:
     file: lib/Smolder/Server.pm
+  Smolder::Server::Control:
+    file: lib/Smolder/Server/Control.pm
+  Smolder::Server::PreFork:
+    file: lib/Smolder/Server/PreFork.pm
   Smolder::TAPHTMLMatrix:
     file: lib/Smolder/TAPHTMLMatrix.pm
   Smolder::TestData:
@@ -149,17 +159,17 @@ provides:
     file: lib/Smolder/Upgrade/V1_30.pm
   Smolder::Upgrade::V1_37:
     file: lib/Smolder/Upgrade/V1_37.pm
+  Smolder::Upgrade::V1_50:
+    file: lib/Smolder/Upgrade/V1_50.pm
   Smolder::Util:
     file: lib/Smolder/Util.pm
-generated_by: Module::Build version 0.33
+  Template::Perl:
+    file: lib/Smolder/Control.pm
+generated_by: Module::Build version 0.35
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
 no_index:
-  directory:
-    - Smolder/Control
-    - Smolder/DB
-    - Smolder/Upgrade
   file:
     - Smolder/AuthHandler.pm
     - Smolder/AuthInfo.pm
@@ -167,6 +177,23 @@ no_index:
     - Smolder/Conf.pm
     - Smolder/Constraints.pm
     - Smolder/Control.pm
+    - Smolder/Control/Admin.pm
+    - Smolder/Control/Developer.pm
+    - Smolder/Control/Graphs.pm
+    - Smolder/Control/Projects.pm
+    - Smolder/Control/Public.pm
+    - Smolder/Control/Admin/Developers.pm
+    - Smolder/Control/Admin/Projects.pm
+    - Smolder/Control/Developer/Prefs.pm
+    - Smolder/Control/Public/Auth.pm
+    - Smolder/DB/Developer.pm
+    - Smolder/DB/Preference.pm
+    - Smolder/DB/ProjectDeveloper.pm
+    - Smolder/DB/Project.pm
+    - Smolder/DB/SmokeReport.pm
+    - Smolder/DB/TestFileComment.pm
+    - Smolder/DB/TestFile.pm
+    - Smolder/DB/TestFileResult.pm
     - Smolder/DB.pm
     - Smolder/Dispatch.pm
     - Smolder/Email.pm
@@ -178,3 +205,11 @@ no_index:
     - Smolder/TestScript.pm
     - Smolder/Upgrade.pm
     - Smolder/Util.pm
+    - Smolder/Upgrade/V0_1.pm
+    - Smolder/Upgrade/V0_3.pm
+    - Smolder/Upgrade/V1_1.pm
+    - Smolder/Upgrade/V1_21.pm
+    - Smolder/Upgrade/V1_24.pm
+    - Smolder/Upgrade/V1_30.pm
+    - Smolder/Upgrade/V1_37.pm
+    - Smolder/Upgrade/V1_50.pm

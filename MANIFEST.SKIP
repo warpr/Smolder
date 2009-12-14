@@ -10,3 +10,5 @@ smolder.conf
 smolder.log
 \.sqlite
 \.bak
+data/smoke_reports/*
+\.pid

@@ -1,3 +1,44 @@
+/*
+    Behaviour
+    Class is inspired from Ben Nolan's behaviour.js script
+    (http://bennolan.com/behaviour/) but uses Prototype's
+    $$() and Element.getElementsBySelector() functions since
+    they support more CSS syntax and are already loaded with
+    prototype.
+*/
+var Behaviour = {
+    rules : $H({}),
+    register : function(new_rules) {
+        Behaviour.rules = Behaviour.rules.merge(new_rules);
+    },
+    apply : function(el) {
+        //console.log('START BEHAVIOUR APPLICATION');
+        Behaviour.rules.each(function(pair) {
+            var rule = pair.key;
+
+            //var start_time = new Date().valueOf();
+            //console.log('applying: ' + rule);
+            var behaviour = pair.value;
+            // if we have an element, use Element.select()
+            // else use $$() to find the targets
+            var targets;
+            if( el ) {
+                targets = $(el).select(rule);
+            } else {
+                targets = $$(rule);
+            }
+
+            // if we got anything back then apply the behaviour
+            //console.log('  found ' + targets.size() + ' elements');
+            if( targets.size() > 0 ) {
+                targets.each(function(target) { behaviour(target) });
+            }
+            //var end_time = new Date().valueOf();
+            //console.log('  took: ' + (end_time - start_time) + 'ms');
+        });
+    }
+};
+
 var Smolder = {};
 
 Smolder.load = function(target, json) {
@@ -99,7 +140,9 @@ Smolder.Ajax.request = function(args) {
     var url       = args.url;
     var params    = args.params || {};
     var indicator = args.indicator;
-    var complete  = args.onComplete || Prototype.emptyFunction;;
+    var on_complete  = args.onComplete || Prototype.emptyFunction;;
+    var on_failure  = args.onFailure || Prototype.emptyFunction;;
+    var on_exception  = args.onException || Prototype.emptyFunction;;
 
     // tell the user that we're doing something
     Smolder.show_indicator(indicator);
@@ -123,10 +166,16 @@ Smolder.Ajax.request = function(args) {
                 // do whatever else the caller wants
                 args.request = request;
                 args.json    = json || {};
-                complete(args);
+                on_complete(args);
             },
-            onException: function(request, exception) { alert("ERROR FROM AJAX REQUEST:\n" + exception) },
-            onFailure: function(request) { Smolder.show_error() }
+            onException: function(request, exception) { 
+                on_exception();
+                alert("ERROR FROM AJAX REQUEST:\n" + exception);
+            },
+            onFailure: function(request) { 
+                on_failure();
+                Smolder.show_error(); 
+            }
         }
     );
 };
@@ -156,7 +205,9 @@ Smolder.Ajax.update = function(args) {
     var params    = args.params || {};
     var target    = args.target;
     var indicator = args.indicator;
-    var complete  = args.onComplete || Prototype.emptyFunction;;
+    var on_complete  = args.onComplete || Prototype.emptyFunction;
+    var on_failure   = args.onFailure || Prototype.emptyFunction;
+    var on_exception = args.onFailure || Prototype.emptyFunction;
 
     // tell the user that we're doing something
     Smolder.show_indicator(indicator);
@@ -184,10 +235,16 @@ Smolder.Ajax.update = function(args) {
                 // do whatever else the caller wants
                 args.request = request;
                 args.json    = json || {};
-                complete(args);
+                on_complete(args);
             },
-            onException: function(request, exception) { alert("ERROR FROM AJAX REQUEST:\n" + exception) },
-            onFailure: function(request) { Smolder.show_error() }
+            onException: function(request, exception) { 
+                on_exception(); 
+                alert("ERROR FROM AJAX REQUEST:\n" + exception); 
+            },
+            onFailure: function(request) { 
+                on_failure(); 
+                Smolder.show_error(); 
+            }
         }
     );
 };
@@ -214,15 +271,18 @@ Smolder.Ajax.form_update = function(args) {
     // aren't already and remember which ones we disabled
     var form_disabled_inputs = Smolder.disable_form(form);
     var oldOnComplete = args.onComplete;
-    args.onComplete = function(request, json) {
-        oldOnComplete(request, json);
+    var reset_things = function() {
         // reset which forms are open
         Smolder.PopupForm.shown_popup_id = '';
-
-        // if we have a form, enable all of the inputs
-        // that we disabled
+        // if we have a form, enable all of the inputs  that we disabled
         Smolder.reenable_form(form, form_disabled_inputs);
     };
+    args.onComplete = function(request, json) {
+        oldOnComplete(request, json);
+        reset_things();
+    };
+    args.onFailure = reset_things;
+    args.onException = reset_things;
 
     // now submit this normally
     Smolder.Ajax.update(args);
@@ -231,16 +291,16 @@ Smolder.Ajax.form_update = function(args) {
 Smolder.disable_form = function(form) {
     // disable all of the inputs of this form that
     // aren't already and remember which ones we disabled
-    var disabled = [];
+    var disabled = $H();
     $A(form.elements).each(
         function(input, i) { 
             if( !input.disabled ) {
-                disabled.push(input.name);
+                disabled.set(input.name, true);
                 input.disabled = true;
             }
         }
     );
-    return disabled;
+    return disabled.keys();
 };
 
 Smolder.reenable_form = function(form, inputs) {
@@ -249,8 +309,11 @@ Smolder.reenable_form = function(form, inputs) {
     if( form && inputs.length > 0 ) {
         $A(inputs).each(
             function(name, i) {
-                if( name && form.elements[name] )
-                    form.elements[name].disabled = false;
+                if( name && form.elements[name] ) {
+                    $A(form.elements[name]).each(function(input) {
+                        input.disabled = false;
+                    });
+                }
             }
         );
     }
@@ -282,7 +345,7 @@ Smolder.PopupForm = {
         if( old_popup_id == popup_id ) {
             Smolder.PopupForm.shown_popup_id = '';
         } else {
-            new Effect.SlideDown(popup_id, { duration: .5 });
+            new Effect.SlideDown(popup_id, { duration: .1 });
             Smolder.PopupForm.shown_popup_id = popup_id;
         }
         return false;
@@ -293,7 +356,7 @@ Smolder.PopupForm = {
         }
     },
     hide: function() {
-        new Effect.SlideUp( Smolder.PopupForm.shown_popup_id, { duration: .5 } );
+        new Effect.SlideUp( Smolder.PopupForm.shown_popup_id, { duration: .1 } );
         Smolder.PopupForm.shown_popup_id = '';
     }
 };
@@ -892,7 +955,7 @@ var myrules = {
         }
     },
     // TAP Matrix triggers for more test file details
-    '.tap a.testfile_details_trigger' : function(el) {
+    '.tap a.details_trigger' : function(el) {
         // get the id of the target div
         var matches = el.id.match(/^for_(.*)$/);
         var target = matches[1];
@@ -903,7 +966,7 @@ var myrules = {
         el.onclick = function() {
             if( Element.visible(target) ) {
                 $(target + '_tap_stream').hide();
-                Effect.BlindUp(target, { duration: .5 });
+                Effect.BlindUp(target, { duration: .1 });
             } else {
                 $(indicator).style.visibility = 'visible';
                 Smolder.Ajax.update({
@@ -923,7 +986,7 @@ var myrules = {
                                         Smolder.setup_tooltip(el, diag);
                                     });
                                 },
-                                duration    : .5
+                                duration    : .1
                             }
                         );
                     }
@@ -934,6 +997,47 @@ var myrules = {
     },
     '.tap div.diag': function(el) {
         Smolder.setup_tooltip(el, el);
+    },
+    '#toggle_tests_trigger' : function(el) {
+    	el.onchange = function() {
+            var count = 0;
+            $$('.tap tbody').each(function(row) {
+                if( el.checked ) {
+                    if( row.hasClassName('passed') ) {
+                        row.hide();
+                    } else {
+                        if( count % 2 == 1 ) {
+                            if(row.hasClassName('even')) {
+                                row.removeClassName('even');
+                                row.addClassName('odd');
+                            }
+                        } else {
+                            if(row.hasClassName('odd')) {
+                                row.removeClassName('odd');
+                                row.addClassName('even');
+                            }
+                        }
+                        count++;
+                    }
+                } else {
+                    if( row.hasClassName('passed') ) {
+                        row.show();
+                    }
+                    if( count % 2 == 1 ) {
+                        if(row.hasClassName('even')) {
+                            row.removeClassName('even');
+                            row.addClassName('odd');
+                        }
+                    } else {
+                        if(row.hasClassName('odd')) {
+                            row.removeClassName('odd');
+                            row.addClassName('even');
+                        }
+                    }
+                    count++;
+                }
+            });
+        };
     },
     '.tap a.show_all' : function(el) {
         Event.observe(el, 'click', function() {

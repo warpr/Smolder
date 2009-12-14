@@ -2,34 +2,55 @@ package Smolder::Control;
 use strict;
 use warnings;
 use base 'CGI::Application';
+use Carp qw(confess);
 use CGI::Application::Plugin::ValidateRM;
 use CGI::Application::Plugin::TT;
 use CGI::Application::Plugin::LogDispatch;
 use CGI::Application::Plugin::JSON qw(:all);
 use Template::Plugin::Cycle;
 use CGI::Cookie;
-#use CGI::Application::Plugin::DebugScreen;
+# This has nice output, but can't get it to work more than once... - JS
+# BEGIN { $ENV{CGI_APP_DEBUG} = 1 ; } use CGI::Application::Plugin::DebugScreen;
 use Smolder;
 use Smolder::Util;
-use Smolder::Conf qw(HostName LogFile TemplateDir);
+use Smolder::Conf qw(ErrorsToScreen HostName LogFile LogLevel TemplateDir);
 use Smolder::DB::Developer;
 use Smolder::DB::Project;
 use File::Spec::Functions qw(catdir catfile tmpdir);
+
+{package Template::Perl;
+ # Import debugging functions into templates (should be switched on with a config)
+ use Smolder::Debug;
+}
+
+sub run {
+    my $self = shift;
+
+    if (ErrorsToScreen) {
+        $self->error_mode('error_message');
+        local $SIG{__DIE__} = sub { confess($_[0]) };
+        local $SIG{__WARN__} = sub { die $_[0] if ($_[0] =~ /Deep recursion/) };
+        $self->SUPER::run(@_);
+    }
+    else {
+        $self->SUPER::run(@_);
+    }
+}
 
 # setup our logging
 __PACKAGE__->add_callback(
     init => sub {
         my $self = shift;
         if (LogFile) {
-
-            # setup log dispatch to use Apache::Log
+            # setup log dispatch to send to a file
             $self->log_config(
                 APPEND_NEWLINE       => 1,
                 LOG_DISPATCH_MODULES => [
                     {
                         module    => 'Log::Dispatch::File',
                         name      => 'smolder_log',
-                        min_level => 'debug',
+                        mode      => 'append',
+                        min_level => LogLevel,
                         filename  => LogFile,
                     }
                 ],
@@ -163,6 +184,18 @@ sub developer {
     return $self->param('__developer');
 }
 
+=head2 can_see_project
+
+This method, will return whether the current user making the request
+has permissions to view the given a L<Smolder::DB::Project> object.
+
+=cut
+
+sub can_see_project {
+    my ($self, $proj) = @_;
+    return $proj->public || $proj->has_developer($self->developer);
+}
+
 =head2 public_projects
 
 This method will return the L<Smolder::DB::Projects> that are marked as 'public'.
@@ -185,7 +218,8 @@ messages, but rather to display un-recoverable and un-expected occurances.
 sub error_message {
     my ($self, $msg) = @_;
     $self->log->warning("An error occurred: $msg");
-    return $self->tt_process('error_message.tmpl', {message => $msg,},);
+    (my $html_msg = $msg) =~ s/\n/<br>/g;
+    return $self->tt_process('error_message.tmpl', {message => $html_msg,},);
 }
 
 =head2 tt_process
@@ -325,11 +359,13 @@ of performance.
 # configuration options for CAP::TT (Template Toolkit)
 my $TT_CONFIG = {
     TEMPLATE_OPTIONS => {
+        EVAL_PERL    => 1,
         COMPILE_DIR  => tmpdir(),
         INCLUDE_PATH => TemplateDir,
         COMPILE_EXT  => '.ttc',
         WRAPPER      => 'wrapper.tmpl',
         RECURSION    => 1,
+        ABSOLUTE     => 1,
         FILTERS      => {
             pass_fail_color => \&Smolder::Util::pass_fail_color,
             format_time     => \&Smolder::Util::format_time,
@@ -355,7 +391,7 @@ my $TT_CONFIG = {
         return catfile($dir, $name . '.tmpl');
     },
 
-    #TEMPLATE_PRECOMPILE_DIR => catdir( tmpdir(), 'templates'),
+    TEMPLATE_PRECOMPILE_DIR => TemplateDir,
 };
 __PACKAGE__->tt_config($TT_CONFIG);
 
