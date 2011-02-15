@@ -40,6 +40,10 @@ Specify the port from which Smolder will server requests. Defaults to 8080
 
 The hostname that Smolder will use when running. Defaults to localhost@localdomain
 
+=item --urlbase
+
+The base url that Smolder will use when rendering links. Defaults to the configured hostname:port.
+
 =item --data_dir
 
 The data directory that Smolder will use. Defaults to $HOME/.smolder (or equivalent)
@@ -60,12 +64,13 @@ Show the help screen.
 
 =cut
 
-my ($conf, $daemon, $help, $port, $host, $data_dir, $share_dir, $log_file);
+my ($conf, $daemon, $help, $port, $host, $urlbase, $data_dir, $share_dir, $log_file);
 GetOptions(
     'conf|c=s'    => \$conf,
     'daemon|d'    => \$daemon,
     'port|p=s'    => \$port,
     'host|h=s'    => \$host,
+    'urlbase=s'   => \$urlbase,
     'data_dir=s'  => \$data_dir,
     'share_dir=s' => \$share_dir,
     'log_file=s'  => \$log_file,
@@ -76,6 +81,7 @@ pod2usage(1) if $help;
 my %conf_values;
 $conf_values{Port}     = $port     if $port;
 $conf_values{HostName} = $host     if $host;
+$conf_values{URLBase}  = $urlbase  if $urlbase;
 $conf_values{DataDir}  = $data_dir if $data_dir;
 $conf_values{LogFile}  = $log_file if $log_file;
 if ($share_dir) {
